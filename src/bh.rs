@@ -2,12 +2,12 @@ use std::{println, time::SystemTime, unreachable} ;
 
 use winit::event_loop::EventLoop;
 
-use crate::{Export, Star, Vector, render::App};
+use crate::{Export, N, Star, Vector, render::App};
 use rand::RngExt;
 
 
 pub const MASS: f32 = 10.;
-const THETA: f32 = 0.5;
+const THETA: f32 = 0.9;
 #[derive(Debug,Copy,Clone)]
 struct Bounds{
     x: f32,
@@ -110,7 +110,7 @@ impl Node{
             }
             Self::Leaf { star: old_star, bounds , idx: old_idx}=>{
 
-                if depth >= 20{
+                if depth >= 10{
                     // Lets stop the madness
                     // ! leaves should have a com like for this instance atleast I feel like
                     old_star.push(star);
@@ -203,8 +203,8 @@ impl Buni{
         let mut rng = rand::rng();
         let time_now = SystemTime::now();
 
-        let stars: Vec<Star> = (0..1000).map(|_| 
-            Star::new(rng.random_range(0..800) as f32,rng.random_range(0..600) as f32)).collect();
+        let stars: Vec<Star> = (0..N).map(|_| 
+            Star::new(rng.random_range(0..1000) as f32,rng.random_range(0..800) as f32)).collect();
 
         Self { stars: stars, itr:0, time: time_now }
     }
@@ -213,7 +213,7 @@ impl Buni{
 
         let mut first_node = Node::new();
         for (i,x) in self.stars.iter().enumerate(){
-            first_node.push(*x,Bounds { x: 400., y: 400., w: 800., h: 800. },i,0);
+            first_node.push(*x,Bounds { x: 400., y: 400., w: 1000., h: 800. },i,0);
         }
 
         first_node
@@ -245,10 +245,13 @@ impl Export for Buni {
     
         self.gravity();
         self.new_pos();
-        self.itr += 1;
+         self.itr += 1;
         if self.itr % 10 == 1{
             let time = self.time.elapsed().unwrap().as_secs();
-            let fps = self.itr as u64/self.time.elapsed().unwrap().as_secs();
+            if time < 1{
+                return
+            }
+            let fps = self.itr as u64/time;
             println!("It took {} seconds or {} fps", time, fps)
         }
         

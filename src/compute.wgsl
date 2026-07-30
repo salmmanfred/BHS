@@ -11,14 +11,19 @@ struct Star{
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    
-               let color = vec4<f32>(0,0,0, 1.0);
+    let tex_size = textureDimensions(screen_tex);
 
-            textureStore(screen_tex, id.xy, color);
+    // 1. Guard against threads running outside the texture bounds
+    if (id.x >= tex_size.x || id.y >= tex_size.y) {
+        return;
+    }
+    let color = vec4<f32>(0,0,0, 1.0);
+
+    textureStore(screen_tex, id.xy, color);
 
     
     
-    if (id.x == 800u && id.y == 600u && id.z == 0u) {
+    if (id.x == 0u && id.y == 0u && id.z == 0u) {
         let color = vec4<f32>(1,1,1, 1.0);
         for (var k = 0u; k < arrayLength(&scene); k++) {
             let pos32 =  scene[k].pos;

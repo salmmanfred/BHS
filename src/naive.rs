@@ -2,7 +2,7 @@ use std::{println, time::SystemTime};
 
 use winit::event_loop::EventLoop;
 
-use crate::{Export, Star, Vector, render::App};
+use crate::{Export, N, Star, Vector, render::App};
 use rand::{ RngExt};
 
 
@@ -15,7 +15,7 @@ impl Uni {
     pub fn new()->Self{
         let mut rng = rand::rng();
 
-        let stars: Vec<Star> = (0..1000).map(|_| Star::new(rng.random_range(0..800) as f32,rng.random_range(0..600) as f32)).collect();
+        let stars: Vec<Star> = (0..N).map(|_| Star::new(rng.random_range(0..1000) as f32,rng.random_range(0..800) as f32)).collect();
 
 
         let time_now = SystemTime::now();
@@ -64,10 +64,13 @@ impl Export for Uni {
     
         self.gravity();
         self.new_pos();
-
+        self.itr += 1;
         if self.itr % 10 == 1{
             let time = self.time.elapsed().unwrap().as_secs();
-            let fps = self.itr as u64/self.time.elapsed().unwrap().as_secs();
+            if time < 1{
+                return
+            }
+            let fps = self.itr as u64/time;
             println!("It took {} seconds or {} fps", time, fps)
         }
     }

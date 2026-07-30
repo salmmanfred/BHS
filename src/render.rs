@@ -75,8 +75,9 @@ impl<T:Export> ApplicationHandler<TriangleAction> for App<T> {
         )]
         let mut attributes = Window::default_attributes();
 
-        attributes = attributes.with_max_inner_size((PhysicalSize::new(800, 800)));
-        attributes = attributes.with_resizable(false);
+        attributes = attributes.with_min_inner_size((PhysicalSize::new(1000, 800)));
+       // attributes = attributes.with_max_inner_size((PhysicalSize::new(800, 800)));
+        attributes = attributes.with_resizable(true);
         attributes = attributes.with_title("The universe in my puta(hahah)");
         attributes = attributes.with_enabled_buttons(WindowButtons::CLOSE);
         
@@ -201,7 +202,7 @@ impl<T:Export> ApplicationHandler<TriangleAction> for App<T> {
             });
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Compute Output Texture"),
-                size: wgpu::Extent3d { width: 800, height: 600, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d { width: 1000, height: 800, depth_or_array_layers: 1 },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
