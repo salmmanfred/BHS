@@ -377,7 +377,7 @@ impl<T:Export> ApplicationHandler<TriangleAction> for App<T> {
 
                   
 
-                    let v= self.uni.export_stars().clone();
+                    let v= self.uni.export_stars();
                     let test_buffer = wgpu_state.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some("Simulation Parameter Buffer"),
                         contents: bytemuck::cast_slice(&v),

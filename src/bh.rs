@@ -1,4 +1,4 @@
-use std::{println, time::SystemTime, unreachable} ;
+use std::{alloc::System, println, time::SystemTime, unreachable} ;
 
 use winit::event_loop::EventLoop;
 
@@ -74,6 +74,8 @@ enum Node{
         star: Vec<Star>,
         bounds: Bounds,
         idx: usize,
+        com: Vector,
+        mass: f32,
     },
 }
 impl Node{
@@ -83,7 +85,7 @@ impl Node{
     pub fn push(&mut self, star: Star,bounds1: Bounds, idx: usize,depth: usize){
         match self{
             Self::Empty=>{
-                *self = Self::Leaf { star: vec![star], bounds: bounds1, idx }
+                *self = Self::Leaf { star: vec![star], bounds: bounds1, idx, mass: star.mass, com: star.pos }
             }
             Self::Internal { com, mass, nodes ,bounds}=>{
                 if star.pos.x <= bounds.x{
@@ -108,29 +110,28 @@ impl Node{
                 com.y = (com.y * *mass + star.pos.y * MASS) / total_mass;
                 *mass = total_mass
             }
-            Self::Leaf { star: old_star, bounds , idx: old_idx}=>{
+            Self::Leaf { star: old_star, bounds , idx: old_idx,com,mass}=>{
 
-                if depth >= 10{
+                if depth >= 20 || old_star.len() >= 2 || (old_star[0].pos.x - star.pos.x).abs() < 1e-4 && (old_star[0].pos.y - star.pos.y).abs() < 1e-4{
                     // Lets stop the madness
                     // ! leaves should have a com like for this instance atleast I feel like
                     old_star.push(star);
-                }
-                if old_star.len() >= 2{
-                    old_star.push(star);
 
-                    return;
+                     let total_mass = *mass + MASS;
+                    com.x = (com.x * *mass + star.pos.x * MASS) / total_mass;
+                    com.y = (com.y * *mass + star.pos.y * MASS) / total_mass;
+                    *mass = total_mass; 
+
+                    return
                 }
                 
-                if (old_star[0].pos.x - star.pos.x).abs() < 1e-4 && (old_star[0].pos.y - star.pos.y).abs() < 1e-4 {
-                    old_star.push(star);
-                    return;
-                }
+                
                 
 
                 let mut nn = Node::Internal { com: Vector::zero_vec(), mass: 0., 
                     nodes: Box::new([Node::Empty, Node::Empty, Node::Empty, Node::Empty]), 
                     bounds: *bounds };
-                nn.push(old_star[0].clone(), *bounds,*old_idx,depth+1);
+                nn.push(old_star[0], *bounds,*old_idx,depth+1);
                 nn.push(star, *bounds,idx,depth+1);
                 
                 
@@ -160,10 +161,21 @@ impl Node{
 
                 
             }
-            Self::Leaf { star: star2, bounds:_, idx:_ }=>{
-                for star3 in star2{
-                    gravity(star, star3);
+            Self::Leaf { star: star2, bounds, idx:_,com,mass }=>{
+
+                let dif_vec = com-&star.pos;
+                
+                let distance = (&dif_vec*&dif_vec);
+                if bounds.w/distance > THETA{
+                    for star3 in star2{
+                        gravity(star, star3);
+                    }
+                }else{
+                   gravity(star, &Star::fake(*mass,*com));
+                    
                 }
+
+                
             }
 
             
@@ -252,7 +264,9 @@ impl Export for Buni {
                 return
             }
             let fps = self.itr as u64/time;
-            println!("It took {} seconds or {} fps", time, fps)
+            println!("It took {} seconds or {} fps", time, fps);
+            self.itr = 0;
+            self.time = SystemTime::now();
         }
         
             
