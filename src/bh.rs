@@ -114,7 +114,7 @@ impl Node{
 
                 if depth >= 20 || old_star.len() >= 2 || (old_star[0].pos.x - star.pos.x).abs() < 1e-4 && (old_star[0].pos.y - star.pos.y).abs() < 1e-4{
                     // Lets stop the madness
-                    // ! leaves should have a com like for this instance atleast I feel like
+                    
                     old_star.push(star);
 
                      let total_mass = *mass + star.mass;
