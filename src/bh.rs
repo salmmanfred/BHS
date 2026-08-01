@@ -292,7 +292,7 @@ impl Export for Buni {
             if time < 1{
                 return
             }
-            let fps = self.itr as u64/time;
+            let fps = self.itr as f32/time as f32;
             println!("It took {} seconds or {} fps", time, fps);
             self.itr = 0;
             self.time = SystemTime::now();
