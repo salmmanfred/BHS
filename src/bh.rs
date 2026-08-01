@@ -105,9 +105,9 @@ impl Node{
                     }
                 }
                 // Update the com
-                let total_mass = *mass + MASS;
-                com.x = (com.x * *mass + star.pos.x * MASS) / total_mass;
-                com.y = (com.y * *mass + star.pos.y * MASS) / total_mass;
+                let total_mass = *mass + star.mass;
+                com.x = (com.x * *mass + star.pos.x * star.mass) / total_mass;
+                com.y = (com.y * *mass + star.pos.y * star.mass) / total_mass;
                 *mass = total_mass
             }
             Self::Leaf { star: old_star, bounds , idx: old_idx,com,mass}=>{
@@ -117,9 +117,9 @@ impl Node{
                     // ! leaves should have a com like for this instance atleast I feel like
                     old_star.push(star);
 
-                     let total_mass = *mass + MASS;
-                    com.x = (com.x * *mass + star.pos.x * MASS) / total_mass;
-                    com.y = (com.y * *mass + star.pos.y * MASS) / total_mass;
+                     let total_mass = *mass + star.mass;
+                    com.x = (com.x * *mass + star.pos.x * star.mass) / total_mass;
+                    com.y = (com.y * *mass + star.pos.y * star.mass) / total_mass;
                     *mass = total_mass; 
 
                     return
@@ -215,8 +215,37 @@ impl Buni{
         let mut rng = rand::rng();
         let time_now = SystemTime::now();
 
-        let stars: Vec<Star> = (0..N).map(|_| 
-            Star::new(rng.random_range(0..1000) as f32,rng.random_range(0..800) as f32)).collect();
+        let stars: Vec<Star> = (0..N).map(|_| {
+            let y_center = 400.;
+            let x_center = 500.;
+            let r_max = 100.;
+            let u: f32 = rng.random_range(0.0..1.0);
+            let r = ( u * r_max).max(0.5); 
+            let angle: f32 = rng.random_range(0.0..std::f32::consts::TAU);
+            
+            let x_c = r * angle.cos();
+            let y_c = r * angle.sin();
+            let x = x_center + x_c;
+            let y = y_center + y_c;
+
+            let speed_mag = (17000. / r).sqrt();
+            let vx = (y_c / r) * speed_mag;
+            let vy = (-x_c / r) * speed_mag;
+
+            let speed = Vector::new(vx, vy, 0.0);
+
+           
+            
+            
+            let mut str = Star::new(x,y);
+            if r_max <= 1.0{
+                str.mass = 1000.;
+            }
+            str.speed = speed;
+            str
+
+        }
+            ).collect();
 
         Self { stars: stars, itr:0, time: time_now }
     }

@@ -87,10 +87,10 @@ impl Star{
     pub fn update_pos(&mut self){
         self.speed = &self.speed + &(&self.force*&DELTA_T);
         self.pos = &self.pos + &(&self.speed*&DELTA_T);
-        if self.pos.x > 1000. || self.pos.y > 800.{
+        /*if self.pos.x > 1000. || self.pos.y > 800.{
             self.pos = &self.pos - &(&self.speed*&DELTA_T);
             self.speed = -self.speed;
-        }
+        }*/
     }
     pub fn samsies(&self, other: &Self)->bool{
         return self.pos.x == other.pos.x && self.pos.y == other.pos.y
