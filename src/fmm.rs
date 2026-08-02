@@ -77,11 +77,11 @@ impl Bounds{
 
 pub const P: usize = 8;
 
-fn build_pascal_table() -> [[f32; P + 1]; P + 1] {
-    let mut table = [[0.0; P + 1]; P + 1];
-    for n in 0..=P {
+pub fn build_pascal_table() -> [[f32; P + 1]; 2 * P] {
+    let mut table = [[0.0; P + 1]; 2 * P];
+    for n in 0..(2 * P) {
         table[n][0] = 1.0;
-        for k in 1..=n {
+        for k in 1..=n.min(P) {
             table[n][k] = table[n - 1][k - 1] + table[n - 1][k];
         }
     }
@@ -137,11 +137,11 @@ impl Multipole{
         for j in 1..P{
             let aj0 = -source.mass/(j as f32)*Z.powf(j as f32);
             let mut ajk = Complex::new(0_f32, 0.);
-            for k in 1..j{
+            for k in 1..=j{
                 let comb = pascal[j - 1][k - 1];
                 ajk += source.multi[k] * Z.powf(j as f32-k as f32)*comb;
             }
-            self.multi[j] = aj0+ajk;
+            self.multi[j] += aj0+ajk;
         }
 
 
@@ -150,7 +150,7 @@ impl Multipole{
         let pascal = build_pascal_table();
         let z0 = source_bound.z();
         let x0 = bounds.z();
-        let z = z0-x0;
+        let z = x0-z0;
 
         for i in 0..P{
             for l in i..P{
@@ -170,7 +170,7 @@ impl Multipole{
             let sign = (-1_f32).powf(k as f32);
             b0 += sign * source.multi[k]/(Z.powf(k as f32))
         }
-        self.local[0] = b0;
+        self.local[0] += b0;
 
         for l in 1..P{
             
@@ -182,9 +182,19 @@ impl Multipole{
                 let comb = pascal[l + k - 1][l];
                 bl1 += sign * source.multi[k]* comb/(Z.powf(k as f32)) 
             }
-            self.local[l] = bl0 + bl1*(1./Z_l)
+            self.local[l] += bl0 + bl1*(1./Z_l)
 
         }
+    }
+    fn local_to_force(&self,star: &mut Star, bounds: &Bounds){
+        let z0 = bounds.z();
+        let z = star.pos.z();
+        let mut wprime = Complex::new(0_f32, 0.);
+
+        for l in 1..P{
+            wprime += l as f32 *self.local[l]*(z-z0).powf(l as f32 - 1.)
+        }
+        star.add_force(&Vector::new(wprime.re, -wprime.im, 0.));
     }
 }
 #[derive(Debug,Clone)]
@@ -452,6 +462,7 @@ impl Node{
                 unreachable!()
             }
             Self::Leaf { star, bounds ,multi}=>{
+                let multi = multi.as_mut().unwrap();
                  match nodeb{
                     Self::Leaf { star: sb, bounds: bb,multi:mb }=>{
                         let dist = bounds.dist(bb);
@@ -464,14 +475,30 @@ impl Node{
                                 // the L2P step is implemented in gravity(x,y)
                                 gravity(x,y);
                             }
-                            // ! here we do the long dist gravity
+                            // here we do the long dist gravity
+                           
+                            //multi.local_to_force(x,bounds);
                         }
-                        unimplemented!()
 
                     }
                     _=>{unreachable!()}
                 }
 
+            }
+        }
+    }
+    pub fn apply_far_field(&mut self) {
+        match self {
+            Self::Internal { nodes, .. } => {
+                for node in nodes.iter_mut() {
+                    node.apply_far_field();
+                }
+            }
+            Self::Leaf { star, bounds, multi } => {
+                let m = multi.as_ref().unwrap();
+                for s in star.iter_mut() {
+                    m.local_to_force(s, bounds);
+                }
             }
         }
     }
@@ -486,6 +513,7 @@ impl Node{
                     for node in nodes.iter_mut(){
                         node.gravity();
                     }
+                    return
                 }
                 let mut children: Vec<&mut Node> = Vec::new();
             
@@ -496,9 +524,9 @@ impl Node{
                 }
                 for a in 0..children.len(){
                     for b in 0..children.len(){
-                        if a == b{
+                        /*if a == b{
                             continue;
-                        }
+                        }*/
                         let b = children[b].clone();
                         children[a].leaf_grav(&b);
                         
@@ -564,37 +592,8 @@ impl Funi{
         let mut rng = rand::rng();
         let time_now = SystemTime::now();
 
-        let stars: Vec<Star> = (0..N).map(|_| {
-            let y_center = 400.;
-            let x_center = 500.;
-            let r_max = 100.;
-            let u: f32 = rng.random_range(0.0..1.0);
-            let r = ( u * r_max).max(0.5); 
-            let angle: f32 = rng.random_range(0.0..std::f32::consts::TAU);
-            
-            let x_c = r * angle.cos();
-            let y_c = r * angle.sin();
-            let x = x_center + x_c;
-            let y = y_center + y_c;
+                let stars: Vec<Star> = (0..N).map(|_| Star::new(rng.random_range(0..1000) as f32,rng.random_range(0..800) as f32)).collect();
 
-            let speed_mag = (17000. / r).sqrt();
-            let vx = (y_c / r) * speed_mag;
-            let vy = (-x_c / r) * speed_mag;
-
-            let speed = Vector::new(vx, vy, 0.0);
-
-           
-            
-            
-            let mut str = Star::new(x,y);
-            if r_max <= 1.0{
-                str.mass = 1000.;
-            }
-            str.speed = speed;
-            str
-
-        }
-            ).collect();
 
         Self { stars: stars, itr:0, time: time_now }
     }
@@ -629,12 +628,27 @@ impl Export for Funi {
         strs
     }
     fn update(&mut self) {
+        
         let mut tree = self.create_tree();
         tree.m2l();
         tree.l2l();
+        tree.apply_far_field();
         tree.gravity();
         self.stars = tree.collapse();
         self.new_pos();
+
+        self.itr += 1;
+        if self.itr % 10 == 1{
+            let time = self.time.elapsed().unwrap().as_secs();
+            if time < 1{
+                return
+            }
+            let fps = self.itr as f32/time as f32;
+            println!("It took {} seconds or {} fps", time, fps);
+            self.itr = 0;
+            self.time = SystemTime::now();
+        }
+
     }
 }
 

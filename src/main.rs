@@ -11,7 +11,7 @@ mod fmm;
 
 use crate::bh::MASS;
 const DELTA_T:f32 = 0.01;
-const N: usize = 100;
+const N: usize = 10000;
 
 #[derive(Clone,Copy,Debug)]
 struct Vector{
@@ -94,6 +94,7 @@ impl Star{
     pub fn update_pos(&mut self){
         self.speed = &self.speed + &(&self.force*&DELTA_T);
         self.pos = &self.pos + &(&self.speed*&DELTA_T);
+        self.force= Vector::zero_vec();
         /*if self.pos.x > 1000. || self.pos.y > 800.{
             self.pos = &self.pos - &(&self.speed*&DELTA_T);
             self.speed = -self.speed;
