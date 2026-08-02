@@ -71,16 +71,24 @@ impl Bounds{
        return (rx*rx+ry*ry).sqrt()
     }
 }
+use num::Complex;
+pub const P: usize = 10;
+#[derive(Debug,Clone)]
+struct Multipole{
+    pub mass: f32,
+    pub cof: [Complex<f32>; P]
+}
 #[derive(Debug,Clone)]
 enum Node{
     
     Internal{
         nodes: Box<[Node;4]>,
-        bounds: Bounds
+        bounds: Bounds,
     },
     Leaf{
         star: Vec<Star>,
         bounds: Bounds,
+
         
     },
 }
@@ -176,17 +184,18 @@ impl Node{
         }
     }
 
-    fn flip(nodea: &&mut Self, nodeb: &&mut Self){
+    fn flip(&mut self, nodeb: Self){
 
-        match nodea{
+        match self{
             Self::Internal { nodes, bounds }=>{
                 
                 match nodeb{
                     Self::Internal { nodes:nb, bounds: bb }=>{
-                        let dist = bounds.dist(bb);
-                        if dist >= bounds.thrs{
+                        let dist = bounds.dist(&bb);
+                        if dist <= bounds.thrs{
                             return
                         }
+                        unimplemented!()
                     }
                     _=>{unreachable!()}
                 }
@@ -194,10 +203,12 @@ impl Node{
             Self::Leaf { star, bounds }=>{
                  match nodeb{
                     Self::Leaf { star: sb, bounds: bb }=>{
-                        let dist = bounds.dist(bb);
-                        if dist >= bounds.thrs{
+                        let dist = bounds.dist(&bb);
+                        if dist <= bounds.thrs{
                             return
                         }
+                        unimplemented!()
+
                     }
                     _=>{unreachable!()}
                 }
@@ -208,6 +219,7 @@ impl Node{
         unimplemented!()
 
     }
+
 
     pub fn m2l(&mut self, ){
     // Generate the local expansion by flipping all the multipoles to local for every well seperate multipole
@@ -226,21 +238,114 @@ impl Node{
 
                 children.extend(a.iter_mut())
             }
-            //lets find all the childrens relation to one and another
+            //lets find all the childrens relation to one and another and flip them
             for a in 0..children.len(){
                 for b in 0..children.len(){
-                    let childa = &children[a];
-                    let childb = &children[b];
-                    Node::flip(childa, childb);
+                    if a == b{
+                        continue;
+                    }
+                    let b = children[b].clone();
+                    children[a].flip(b);
+                    //let childb = &children[b];
+                    //Node::flip(childa, childb);
                 }
+            }
+            // now the children have a local expansion
+            // lets check deeper
+            for x in nodes.iter_mut(){
+                x.m2l();
             }
         }
         Self::Leaf { star, bounds }=>{
-            unimplemented!()
+           return // no m2l on this layer since it has no children and the leaf m2l is done at higher levels ^
         }
     }
 
     }
+    pub fn l2l(&mut self){
+        // now we distribute all them local expansions that we calculated before from m2l but now down
+        match self{
+            Self::Internal { nodes, bounds }=>{
+                unimplemented!()
+            }
+            Self::Leaf { star, bounds }=>{
+                return // the leaf cant distribute down
+            }
+        }
+    }
+    fn is_grandfather(&self)->bool{
+        // is self a grandfather then its nodes[0] has to ben an internal but its nodes[0] has to be a leaf
+        match self {
+
+            Self::Internal { nodes, bounds:_ }=>{
+                // the child is internal
+                match &nodes[0] {
+                    Self::Internal { nodes, bounds:_ }=>{
+                        //the childs child is a leaf => its a grandfather otherwise its just not 
+                        return nodes[0].is_leaf()
+                    }
+
+                    _=>{return false}
+                }
+
+            }
+            _=>{return false}
+        }
+    }
+    fn leaf_grav(nodea: &&mut Self, nodeb: &&mut Self){
+        match nodea{
+            Self::Internal { nodes, bounds }=>{
+                
+                unreachable!()
+            }
+            Self::Leaf { star, bounds }=>{
+                 match nodeb{
+                    Self::Leaf { star: sb, bounds: bb }=>{
+                        let dist = bounds.dist(bb);
+                        if dist >= bounds.thrs{
+                            // if they are too far they will have the multipole effect instead
+                            return;
+                        }
+                        for x in star{
+                            for y in sb{
+                                // the L2P step is implemented in gravity(x,y)
+                                unimplemented!() //gravity(x,y);
+                            }
+                        }
+                        unimplemented!()
+
+                    }
+                    _=>{unreachable!()}
+                }
+
+            }
+        }
+    }
+    pub fn gravity(&mut self){
+        // This will only update the gravity in the tree and then we have to collapse the tree into a vec 
+        // with all the updated values
+        let is_grand = self.is_grandfather();
+
+        match self{
+            Self::Internal { nodes, bounds }=>{
+                if !is_grand {
+                    for node in nodes.iter_mut(){
+                        node.gravity();
+                    }
+                }
+                for node in nodes.iter_mut(){
+                    let children = node.get_children();
+                }
+
+            }
+
+            Self::Leaf { star, bounds }=>{
+                unreachable!()
+            }
+        }
+
+    }
+
 
     
 }
