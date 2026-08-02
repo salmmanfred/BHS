@@ -70,13 +70,122 @@ impl Bounds{
        let ry = self.y-b.y;
        return (rx*rx+ry*ry).sqrt()
     }
+    fn z(&self)->Complex<f32>{
+        Complex { re: self.x, im: self.y }
+    }
 }
+
+pub const P: usize = 8;
+
+fn build_pascal_table() -> [[f32; P + 1]; P + 1] {
+    let mut table = [[0.0; P + 1]; P + 1];
+    for n in 0..=P {
+        table[n][0] = 1.0;
+        for k in 1..=n {
+            table[n][k] = table[n - 1][k - 1] + table[n - 1][k];
+        }
+    }
+    table
+}
+
 use num::Complex;
-pub const P: usize = 10;
 #[derive(Debug,Clone)]
 struct Multipole{
     pub mass: f32,
-    pub cof: [Complex<f32>; P]
+    multi: [Complex<f32>; P],
+    local: [Complex<f32>; P],
+}
+impl Multipole{
+    pub fn new(stars: &Vec<Star>, bounds: &Bounds)->Self{
+        let mut mass = 0_f32;
+        let z0 = bounds.z();
+
+        let mut aks = [Complex{re: 0_f32, im: 0.};P];
+        let local = [Complex{re: 0_f32, im: 0.};P];
+
+        for k in 0..P{
+            let mut ak = Complex { re: 0_f32, im: 0. };
+            for x in stars{
+                let massi = x.mass;
+                mass += massi;
+                ak += massi*(x.pos.z()-z0).powf(k as f32);
+            }
+            ak *= -1./k as f32;
+            aks[k] = ak
+        }
+        Multipole{
+            mass,
+            multi: aks,
+            local
+        }
+    }
+    pub fn empty()->Self{
+        let local = [Complex{re: 0_f32, im: 0.};P];
+
+        Multipole { mass: 0., multi: local, local }
+    }
+
+    pub fn m2m(&mut self,source: &Multipole, source_bound: &Bounds, bounds: &Bounds){
+        let z0 = source_bound.z();
+        let x0 = bounds.z();
+        let Z = z0-x0;
+        let pascal = build_pascal_table();
+
+
+        self.mass += source.mass;
+
+        for j in 1..P{
+            let aj0 = -source.mass/(j as f32)*Z.powf(j as f32);
+            let mut ajk = Complex::new(0_f32, 0.);
+            for k in 1..j{
+                let comb = pascal[j - 1][k - 1];
+                ajk += source.multi[k] * Z.powf(j as f32-k as f32)*comb;
+            }
+            self.multi[j] = aj0+ajk;
+        }
+
+
+    }
+    pub fn l2l(&mut self,source: &Multipole, source_bound: &Bounds, bounds: &Bounds){
+        let pascal = build_pascal_table();
+        let z0 = source_bound.z();
+        let x0 = bounds.z();
+        let z = z0-x0;
+
+        for i in 0..P{
+            for l in i..P{
+                self.local[i] += source.local[l]*pascal[l][i]*z.powf(l as f32- i as f32)
+            }
+        }
+    }
+
+    pub fn calc_local(&mut self, source: Multipole, source_bound: &Bounds, bounds: &Bounds){
+        let z0 = source_bound.z();
+        let x0 = bounds.z();
+        let Z = z0-x0;
+        let pascal = build_pascal_table();
+
+        let mut b0 = source.mass*(-Z).ln();
+        for k in 1..P{
+            let sign = (-1_f32).powf(k as f32);
+            b0 += sign * source.multi[k]/(Z.powf(k as f32))
+        }
+        self.local[0] = b0;
+
+        for l in 1..P{
+            
+            let Z_l = Z.powi(l as i32);
+            let bl0 = -source.mass/(l as f32 * Z_l);
+            let mut bl1: Complex<f32> = Complex::new(0_f32, 0.);
+            for k in 1..P{
+                let sign = (-1_f32).powf(k as f32);
+                let comb = pascal[l + k - 1][l];
+                bl1 += sign * source.multi[k]* comb/(Z.powf(k as f32)) 
+            }
+            self.local[l] = bl0 + bl1*(1./Z_l)
+
+        }
+    }
 }
 #[derive(Debug,Clone)]
 enum Node{
@@ -84,11 +193,13 @@ enum Node{
     Internal{
         nodes: Box<[Node;4]>,
         bounds: Bounds,
+        multi: Option<Multipole>,
+
     },
     Leaf{
         star: Vec<Star>,
         bounds: Bounds,
-
+        multi: Option<Multipole>,
         
     },
 }
@@ -99,7 +210,7 @@ impl Node{
             Self::create_internal(bounds.subdivide(1), lvl),
             Self::create_internal(bounds.subdivide(2), lvl),
             Self::create_internal(bounds.subdivide(3), lvl),
-            ]), bounds };
+            ]), bounds, multi: Option::None };
 
         for star in stars{
             tree.push_down( star);
@@ -113,7 +224,7 @@ impl Node{
     }
     fn create_internal(bounds: Bounds, lvl: usize)->Self{
         if lvl == MAXLVL{
-            return Self::Leaf { star: Vec::new(), bounds };
+            return Self::Leaf { star: Vec::new(), bounds, multi: Option::None };
         }
         let lvl = lvl +1;
 
@@ -122,13 +233,13 @@ impl Node{
             Self::create_internal(bounds.subdivide(1), lvl),
             Self::create_internal(bounds.subdivide(2), lvl),
             Self::create_internal(bounds.subdivide(3), lvl),
-            ]), bounds }
+            ]), bounds, multi: Option::None }
 
     }
     pub fn push_down(&mut self, star: Star){
 
         match self{
-            Self::Internal { nodes, bounds }=>{
+            Self::Internal { nodes, bounds, multi:_ }=>{
                 if star.pos.x <= bounds.x{
                     if star.pos.y <= bounds.y{
                         nodes[0].push_down(star,);
@@ -144,23 +255,47 @@ impl Node{
                     }
                 }
             }
-            Self::Leaf { star: starvec, bounds:_ } =>{
+            Self::Leaf { star: starvec, bounds:_ , multi:_} =>{
                 starvec.push(star);
             }
         }
         
     }
     
+    
 
     pub fn p2m(&mut self){
         match self {
-            Self::Internal { nodes, bounds:_ } =>{
+            Self::Internal { nodes, bounds, multi} =>{
                 for node in nodes.iter_mut(){
                     node.p2m();
                 }
-                // ! p2m calculate for the this instance
+                // calculate m2m for this instance
+                for node in nodes.iter(){
+                    match node {
+                        Self::Internal { nodes:_, bounds: source_bound, multi:mb }=>{
+                            let mut new_multi = Multipole::empty();
+                            let source = mb.as_ref().unwrap();
+
+                            new_multi.m2m(&source, source_bound, bounds);
+                            *multi = Some(new_multi)
+                        }
+                        Self::Leaf { star:_, bounds: source_bound, multi:mb }=>{
+                            let mut new_multi = Multipole::empty();
+                            let source = mb.as_ref().unwrap();
+
+                            new_multi.m2m(&source, source_bound, bounds);
+                            *multi = Some(new_multi)
+                        }
+                    }
+                }
+
+                
+
             },
-            Self::Leaf { star, bounds }=>{
+            Self::Leaf { star, bounds , multi}=>{
+                let mlt = Some(Multipole::new(star, bounds));
+                *multi = mlt;
                 // ! leaf has nothing below it so the p2m calculation goes right here
             }
             
@@ -168,46 +303,49 @@ impl Node{
     }
     pub fn get_children(&mut self,)->&mut Box<[Node;4]>{
         match self{
-            Self::Internal { nodes, bounds:_ }=>{
-                // ! Please no cloning
+            Self::Internal { nodes, bounds:_ , multi:_}=>{
+                
                 return nodes;
             }
-            Self::Leaf { star:_, bounds:_ }=>{
+            Self::Leaf { star:_, bounds:_ , multi:_}=>{
                 unreachable!()
             }
         }
     }
     fn is_leaf(&self)->bool{
         match self{
-            Self::Internal { nodes:_, bounds:_ }=> return false,
-            Self::Leaf { star:_, bounds:_ } => return true,
+            Self::Internal { nodes:_, bounds:_ , multi:_}=> return false,
+            Self::Leaf { star:_, bounds:_ , multi:_} => return true,
         }
     }
 
     fn flip(&mut self, nodeb: Self){
 
         match self{
-            Self::Internal { nodes, bounds }=>{
+            Self::Internal { nodes:_, bounds , multi}=>{
                 
                 match nodeb{
-                    Self::Internal { nodes:nb, bounds: bb }=>{
+                    Self::Internal { nodes:_, bounds: bb ,multi:mb}=>{
                         let dist = bounds.dist(&bb);
                         if dist <= bounds.thrs{
                             return
                         }
-                        unimplemented!()
+                        let mutli = multi.as_mut().unwrap();
+                        mutli.calc_local(mb.unwrap(), &bb, bounds);
+                        
                     }
                     _=>{unreachable!()}
                 }
             }
-            Self::Leaf { star, bounds }=>{
+            Self::Leaf { star:_, bounds , multi}=>{
                  match nodeb{
-                    Self::Leaf { star: sb, bounds: bb }=>{
+                    Self::Leaf { star:_, bounds: bb ,multi:mb}=>{
                         let dist = bounds.dist(&bb);
                         if dist <= bounds.thrs{
                             return
                         }
-                        unimplemented!()
+                        let mutli = multi.as_mut().unwrap();
+                        mutli.calc_local(mb.unwrap(), &bb, bounds);
 
                     }
                     _=>{unreachable!()}
@@ -216,7 +354,6 @@ impl Node{
             }
         }
 
-        unimplemented!()
 
     }
 
@@ -224,7 +361,7 @@ impl Node{
     pub fn m2l(&mut self, ){
     // Generate the local expansion by flipping all the multipoles to local for every well seperate multipole
     match self{
-        Self::Internal { nodes, bounds }=>{
+        Self::Internal { nodes, bounds:_ ,multi:_}=>{
             // all the nodes in this node will NOT be well seperated 
             // but some of the nodes children will be well seperated!
 
@@ -244,10 +381,10 @@ impl Node{
                     if a == b{
                         continue;
                     }
+                    // ! can i remove the cloning? 
                     let b = children[b].clone();
                     children[a].flip(b);
-                    //let childb = &children[b];
-                    //Node::flip(childa, childb);
+                    
                 }
             }
             // now the children have a local expansion
@@ -256,7 +393,7 @@ impl Node{
                 x.m2l();
             }
         }
-        Self::Leaf { star, bounds }=>{
+        Self::Leaf { star:_, bounds:_ ,multi:_}=>{
            return // no m2l on this layer since it has no children and the leaf m2l is done at higher levels ^
         }
     }
@@ -265,10 +402,26 @@ impl Node{
     pub fn l2l(&mut self){
         // now we distribute all them local expansions that we calculated before from m2l but now down
         match self{
-            Self::Internal { nodes, bounds }=>{
-                unimplemented!()
+            Self::Internal { nodes, bounds:source_bound , multi}=>{
+                for node in nodes.iter_mut(){
+                    match node {
+                        Self::Internal { nodes:_, bounds: bounds, multi:mb }=>{
+                            let source = multi.as_ref().unwrap();
+                            let a = mb.as_mut().unwrap();
+
+                            a.l2l(source, source_bound, bounds);
+
+                        }
+                        Self::Leaf { star:_, bounds: bounds, multi:mb }=>{
+                            let source = multi.as_ref().unwrap();
+                            let a = mb.as_mut().unwrap();
+
+                            a.l2l(source, source_bound, bounds);
+                        }
+                    }
+                }
             }
-            Self::Leaf { star, bounds }=>{
+            Self::Leaf { star:_, bounds:_, multi:_ }=>{
                 return // the leaf cant distribute down
             }
         }
@@ -277,10 +430,10 @@ impl Node{
         // is self a grandfather then its nodes[0] has to ben an internal but its nodes[0] has to be a leaf
         match self {
 
-            Self::Internal { nodes, bounds:_ }=>{
+            Self::Internal { nodes, bounds:_ ,multi:_}=>{
                 // the child is internal
                 match &nodes[0] {
-                    Self::Internal { nodes, bounds:_ }=>{
+                    Self::Internal { nodes, bounds:_,multi:_ }=>{
                         //the childs child is a leaf => its a grandfather otherwise its just not 
                         return nodes[0].is_leaf()
                     }
@@ -292,15 +445,15 @@ impl Node{
             _=>{return false}
         }
     }
-    fn leaf_grav(nodea: &&mut Self, nodeb: &&mut Self){
-        match nodea{
-            Self::Internal { nodes, bounds }=>{
+    fn leaf_grav(&mut self, nodeb: &Self){
+        match self{
+            Self::Internal { nodes:_, bounds:_ ,multi:_}=>{
                 
                 unreachable!()
             }
-            Self::Leaf { star, bounds }=>{
+            Self::Leaf { star, bounds ,multi}=>{
                  match nodeb{
-                    Self::Leaf { star: sb, bounds: bb }=>{
+                    Self::Leaf { star: sb, bounds: bb,multi:mb }=>{
                         let dist = bounds.dist(bb);
                         if dist >= bounds.thrs{
                             // if they are too far they will have the multipole effect instead
@@ -309,8 +462,9 @@ impl Node{
                         for x in star{
                             for y in sb{
                                 // the L2P step is implemented in gravity(x,y)
-                                unimplemented!() //gravity(x,y);
+                                gravity(x,y);
                             }
+                            // ! here we do the long dist gravity
                         }
                         unimplemented!()
 
@@ -327,27 +481,78 @@ impl Node{
         let is_grand = self.is_grandfather();
 
         match self{
-            Self::Internal { nodes, bounds }=>{
+            Self::Internal { nodes, bounds ,multi}=>{
                 if !is_grand {
                     for node in nodes.iter_mut(){
                         node.gravity();
                     }
                 }
-                for node in nodes.iter_mut(){
-                    let children = node.get_children();
+                let mut children: Vec<&mut Node> = Vec::new();
+            
+                for x in nodes.iter_mut(){
+                    let a  = x.get_children();
+
+                    children.extend(a.iter_mut())
                 }
+                for a in 0..children.len(){
+                    for b in 0..children.len(){
+                        if a == b{
+                            continue;
+                        }
+                        let b = children[b].clone();
+                        children[a].leaf_grav(&b);
+                        
+                    }
+                }
+
+                
 
             }
 
-            Self::Leaf { star, bounds }=>{
+            Self::Leaf { star:_, bounds:_ ,multi:_}=>{
                 unreachable!()
             }
         }
 
     }
+    pub fn collapse(&self)->Vec<Star>{
+        let mut stars: Vec<Star> = Vec::new();
+        match self{
+            Self::Internal { nodes, bounds:_, multi:_ }=>{
+
+                for x in nodes.iter(){
+                    stars.extend(x.collapse())
+
+                }
+            }
+            Self::Leaf { star, bounds:_, multi:_ }=>{
+                stars.extend(star);
+            }
+        }
+        return stars
+    }
 
 
     
+}
+fn gravity(star: &mut Star, star2: &Star){
+    if star.samsies(star2){
+        return;
+    }
+    let dif_vec = &star2.pos-&star.pos;
+    
+    let softening_sq = 0.1; 
+    let rs = &dif_vec*&dif_vec;
+
+    let rs_soft = rs + softening_sq;
+
+
+    let mass = star.mass*star2.mass;
+    // ! For now lets ignore the constant
+    let grav_mag = mass/(rs_soft)*10_f32.powf(-1.);
+    let n_vec =&dif_vec*&(1./(rs_soft.sqrt()));
+    let grav_vec = &n_vec*&grav_mag;
+    star.add_force(&grav_vec);
 }
 struct Funi{
     stars: Vec<Star>,
@@ -395,18 +600,18 @@ impl Funi{
     }
     pub fn create_tree(&self)->Node{
 
-        let mut tree = Node::new(vec![Star::new(999.,799.) ], 0, Bounds { x: 500., y: 400., w: 1000., h: 800., thrs: 0. });
+        let mut tree = Node::new(self.stars.clone(), 0, Bounds { x: 500., y: 400., w: 1000., h: 800., thrs: 0. });
         tree.p2m();
 
         tree
     }
-    pub fn gravity(&mut self){
+    /*pub fn gravity(&mut self){
         let network = self.create_tree();
         for star in &mut self.stars{
             star.force = Vector::zero_vec();
             //network.gravity(star);
         }
-    }
+    }*/
     pub fn new_pos(&mut self){
         for x in &mut self.stars{
             x.update_pos();
@@ -414,8 +619,28 @@ impl Funi{
     }
 
 }
+impl Export for Funi {
+    fn export_stars(&self)->Vec<f32> {
+        
+        let mut strs = Vec::new();
+        for x in self.stars.clone(){
+            strs.extend(x.flat())
+        }
+        strs
+    }
+    fn update(&mut self) {
+        let mut tree = self.create_tree();
+        tree.m2l();
+        tree.l2l();
+        tree.gravity();
+        self.stars = tree.collapse();
+        self.new_pos();
+    }
+}
 
 pub fn run(){
-    let f = Funi::new();
-    f.create_tree();
+    let uni = Funi::new();
+    let event_loop = EventLoop::with_user_event().build().unwrap();
+    let mut app = App::new(&event_loop, uni);
+    event_loop.run_app(&mut app).unwrap();
 }

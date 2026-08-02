@@ -1,4 +1,5 @@
 use std::{ops::{Add, Mul, Neg, Sub}, vec};
+use num::Complex;
 
 
 
@@ -7,9 +8,10 @@ mod render;
 mod bh;
 mod fmm;
 
+
 use crate::bh::MASS;
 const DELTA_T:f32 = 0.01;
-const N: usize = 10000;
+const N: usize = 100;
 
 #[derive(Clone,Copy,Debug)]
 struct Vector{
@@ -27,6 +29,9 @@ impl Vector {
     }
     fn flat(&self)->Vec<f32>{
         vec![self.x ,self.y,self.z]
+    }
+    fn z(&self)->Complex<f32>{
+        Complex { re: self.x, im: self.y }
     }
 }
 impl Sub<&Vector> for &Vector{
