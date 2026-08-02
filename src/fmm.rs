@@ -1,4 +1,4 @@
-use std::{ println, time::SystemTime, unimplemented, unreachable} ;
+use std::{ panic, println, time::SystemTime, unimplemented, unreachable} ;
 
 use winit::event_loop::EventLoop;
 
@@ -13,6 +13,7 @@ struct Bounds{
     y:f32,
     w: f32,
     h:f32,
+    thrs: f32,
 }
 impl Bounds{
     pub fn subdivide(&self, i:u32)->Bounds{
@@ -23,8 +24,10 @@ impl Bounds{
                 let y = self.y-self.h*0.25;
                 let w = self.w*0.5;
                 let h = self.h*0.5;
+                //thrs is the distance to the corner aka w*w+h*h 
+                let thrs =(w*w+h*h).sqrt();
                 return Bounds{
-                    x,y,w,h
+                    x,y,w,h,thrs
                 }
             }
             1=>{
@@ -32,8 +35,9 @@ impl Bounds{
                 let y = self.y-self.h*0.25;
                 let w = self.w*0.5;
                 let h = self.h*0.5;
+                let thrs =(w*w+h*h).sqrt();
                 return Bounds{
-                    x,y,w,h
+                    x,y,w,h,thrs
                 }
             }
             2=>{
@@ -41,8 +45,9 @@ impl Bounds{
                 let y = self.y+self.h*0.25;
                 let w = self.w*0.5;
                 let h = self.h*0.5;
+                let thrs =(w*w+h*h).sqrt();
                 return Bounds{
-                    x,y,w,h
+                    x,y,w,h,thrs
                 }
             }
             3=>{
@@ -50,8 +55,9 @@ impl Bounds{
                 let y = self.y+self.h*0.25;
                 let w = self.w*0.5;
                 let h = self.h*0.5;
+                let thrs =(w*w+h*h).sqrt();
                 return Bounds{
-                    x,y,w,h
+                    x,y,w,h,thrs
                 }
             }
             _=>{
@@ -59,8 +65,13 @@ impl Bounds{
             }
         }
     }
+    fn dist(&self, b: &Bounds)->f32{
+       let rx =  self.x-b.x;
+       let ry = self.y-b.y;
+       return (rx*rx+ry*ry).sqrt()
+    }
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 enum Node{
     
     Internal{
@@ -88,6 +99,9 @@ impl Node{
 
         return tree
 
+    }
+    fn get_leaf_center(&self)->Vec<Vector>{
+        unimplemented!()
     }
     fn create_internal(bounds: Bounds, lvl: usize)->Self{
         if lvl == MAXLVL{
@@ -128,6 +142,7 @@ impl Node{
         }
         
     }
+    
 
     pub fn p2m(&mut self){
         match self {
@@ -143,7 +158,90 @@ impl Node{
             
         }
     }
-    
+    pub fn get_children(&mut self,)->&mut Box<[Node;4]>{
+        match self{
+            Self::Internal { nodes, bounds:_ }=>{
+                // ! Please no cloning
+                return nodes;
+            }
+            Self::Leaf { star:_, bounds:_ }=>{
+                unreachable!()
+            }
+        }
+    }
+    fn is_leaf(&self)->bool{
+        match self{
+            Self::Internal { nodes:_, bounds:_ }=> return false,
+            Self::Leaf { star:_, bounds:_ } => return true,
+        }
+    }
+
+    fn flip(nodea: &&mut Self, nodeb: &&mut Self){
+
+        match nodea{
+            Self::Internal { nodes, bounds }=>{
+                
+                match nodeb{
+                    Self::Internal { nodes:nb, bounds: bb }=>{
+                        let dist = bounds.dist(bb);
+                        if dist >= bounds.thrs{
+                            return
+                        }
+                    }
+                    _=>{unreachable!()}
+                }
+            }
+            Self::Leaf { star, bounds }=>{
+                 match nodeb{
+                    Self::Leaf { star: sb, bounds: bb }=>{
+                        let dist = bounds.dist(bb);
+                        if dist >= bounds.thrs{
+                            return
+                        }
+                    }
+                    _=>{unreachable!()}
+                }
+
+            }
+        }
+
+        unimplemented!()
+
+    }
+
+    pub fn m2l(&mut self, ){
+    // Generate the local expansion by flipping all the multipoles to local for every well seperate multipole
+    match self{
+        Self::Internal { nodes, bounds }=>{
+            // all the nodes in this node will NOT be well seperated 
+            // but some of the nodes children will be well seperated!
+
+            let mut children: Vec<&mut Node> = Vec::new();
+            if nodes[0].is_leaf(){
+                return
+            }
+            for x in nodes.iter_mut(){
+                let a  = x.get_children();
+                
+
+                children.extend(a.iter_mut())
+            }
+            //lets find all the childrens relation to one and another
+            for a in 0..children.len(){
+                for b in 0..children.len(){
+                    let childa = &children[a];
+                    let childb = &children[b];
+                    Node::flip(childa, childb);
+                }
+            }
+        }
+        Self::Leaf { star, bounds }=>{
+            unimplemented!()
+        }
+    }
+
+    }
+
     
 }
 struct Funi{
@@ -191,9 +289,8 @@ impl Funi{
         Self { stars: stars, itr:0, time: time_now }
     }
     pub fn create_tree(&self)->Node{
-        // ! we could make it just store the id and not the star and save a lot of time from that 
 
-        let mut tree = Node::new(vec![Star::new(999.,799.) ], 0, Bounds { x: 500., y: 400., w: 1000., h: 800. });
+        let mut tree = Node::new(vec![Star::new(999.,799.) ], 0, Bounds { x: 500., y: 400., w: 1000., h: 800., thrs: 0. });
         tree.p2m();
 
         tree
