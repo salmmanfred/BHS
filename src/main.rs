@@ -30,8 +30,8 @@ impl Vector {
     fn flat(&self)->Vec<f32>{
         vec![self.x ,self.y,self.z]
     }
-    fn z(&self)->Complex<f32>{
-        Complex { re: self.x, im: self.y }
+    fn z(&self)->Complex<f64>{
+        Complex { re: self.x as f64, im: self.y as f64 }
     }
 }
 impl Sub<&Vector> for &Vector{

@@ -6,7 +6,7 @@ use crate::{Export, N, Star, Vector, render::App};
 use rand::RngExt;
 
 
-const MAXLVL: usize = 3;
+const MAXLVL: usize = 5;
 #[derive(Debug,Copy,Clone)]
 struct Bounds{
     x: f32,
@@ -70,14 +70,23 @@ impl Bounds{
        let ry = self.y-b.y;
        return (rx*rx+ry*ry).sqrt()
     }
-    fn z(&self)->Complex<f32>{
-        Complex { re: self.x, im: self.y }
+    fn z(&self)->Complex<f64>{
+        Complex { re: self.x as f64, im: self.y as f64 }
+    }
+    pub fn is_well_separated(&self, other: &Bounds) -> bool {
+        let dx = self.x - other.x;
+        let dy = self.y - other.y;
+        let dist = (dx * dx + dy * dy).sqrt();
+
+        // Standard FMM condition: centers are farther apart than 1.5 - 2.0x box width
+        // Adjust `1.5` if you want higher accuracy (2.0) or faster speed (1.2)
+        dist > (self.w + other.w) * 0.75 
     }
 }
 
 pub const P: usize = 8;
 
-pub fn build_pascal_table() -> [[f32; P + 1]; 2 * P] {
+pub fn build_pascal_table() -> [[f64; P + 1]; 2 * P] {
     let mut table = [[0.0; P + 1]; 2 * P];
     for n in 0..(2 * P) {
         table[n][0] = 1.0;
@@ -88,29 +97,30 @@ pub fn build_pascal_table() -> [[f32; P + 1]; 2 * P] {
     table
 }
 
-use num::Complex;
+use num::{Complex, Float};
 #[derive(Debug,Clone)]
 struct Multipole{
-    pub mass: f32,
-    multi: [Complex<f32>; P],
-    local: [Complex<f32>; P],
+    pub mass: f64,
+    multi: [Complex<f64>; P],
+    local: [Complex<f64>; P],
 }
 impl Multipole{
     pub fn new(stars: &Vec<Star>, bounds: &Bounds)->Self{
-        let mut mass = 0_f32;
+        let mut mass = 0_f64;
         let z0 = bounds.z();
 
-        let mut aks = [Complex{re: 0_f32, im: 0.};P];
-        let local = [Complex{re: 0_f32, im: 0.};P];
+        let mut aks = [Complex{re: 0_f64, im: 0.};P];
+        let local = [Complex{re: 0_f64, im: 0.};P];
 
-        for k in 0..P{
-            let mut ak = Complex { re: 0_f32, im: 0. };
+        for k in 1..P{
+            let mut ak = Complex { re: 0_f64, im: 0. };
             for x in stars{
-                let massi = x.mass;
-                mass += massi;
-                ak += massi*(x.pos.z()-z0).powf(k as f32);
+                let massi = x.mass as f64;
+                mass += massi as f64;
+                ak += massi*(x.pos.z()-z0).powi(k as i32);
             }
-            ak *= -1./k as f32;
+            ak *= -1./k as f64;
+            mass/=7.;
             aks[k] = ak
         }
         Multipole{
@@ -120,7 +130,7 @@ impl Multipole{
         }
     }
     pub fn empty()->Self{
-        let local = [Complex{re: 0_f32, im: 0.};P];
+        let local = [Complex{re: 0_f64, im: 0.};P];
 
         Multipole { mass: 0., multi: local, local }
     }
@@ -135,11 +145,11 @@ impl Multipole{
         self.mass += source.mass;
 
         for j in 1..P{
-            let aj0 = -source.mass/(j as f32)*Z.powf(j as f32);
-            let mut ajk = Complex::new(0_f32, 0.);
+            let aj0 = -source.mass/(j as f64)*Z.powi(j as i32);
+            let mut ajk = Complex::new(0_f64, 0.);
             for k in 1..=j{
                 let comb = pascal[j - 1][k - 1];
-                ajk += source.multi[k] * Z.powf(j as f32-k as f32)*comb;
+                ajk += source.multi[k] * Z.powi(j as i32-k as i32)*comb;
             }
             self.multi[j] += aj0+ajk;
         }
@@ -154,12 +164,12 @@ impl Multipole{
 
         for i in 0..P{
             for l in i..P{
-                self.local[i] += source.local[l]*pascal[l][i]*z.powf(l as f32- i as f32)
+                self.local[i] += source.local[l]*pascal[l][i]*z.powi(l as i32- i as i32)
             }
         }
     }
 
-    pub fn calc_local(&mut self, source: Multipole, source_bound: &Bounds, bounds: &Bounds){
+    pub fn calc_local(&mut self, source: &Multipole, source_bound: &Bounds, bounds: &Bounds){
         let z0 = source_bound.z();
         let x0 = bounds.z();
         let Z = z0-x0;
@@ -167,20 +177,22 @@ impl Multipole{
 
         let mut b0 = source.mass*(-Z).ln();
         for k in 1..P{
-            let sign = (-1_f32).powf(k as f32);
-            b0 += sign * source.multi[k]/(Z.powf(k as f32))
+            //let sign = (-1_f64).powf(k as f64);
+            let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
+            b0 += sign * source.multi[k]/(Z.powi(k as i32))
         }
         self.local[0] += b0;
 
         for l in 1..P{
             
             let Z_l = Z.powi(l as i32);
-            let bl0 = -source.mass/(l as f32 * Z_l);
-            let mut bl1: Complex<f32> = Complex::new(0_f32, 0.);
+            let bl0 = -source.mass/(l as f64 * Z_l);
+            let mut bl1: Complex<f64> = Complex::new(0_f64, 0.);
             for k in 1..P{
-                let sign = (-1_f32).powf(k as f32);
+                //let sign = (-1_f64).powf(k as f64);
+                let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
                 let comb = pascal[l + k - 1][l];
-                bl1 += sign * source.multi[k]* comb/(Z.powf(k as f32)) 
+                bl1 += sign * source.multi[k]* comb/(Z.powi(k as i32)) 
             }
             self.local[l] += bl0 + bl1*(1./Z_l)
 
@@ -189,12 +201,12 @@ impl Multipole{
     fn local_to_force(&self,star: &mut Star, bounds: &Bounds){
         let z0 = bounds.z();
         let z = star.pos.z();
-        let mut wprime = Complex::new(0_f32, 0.);
+        let mut wprime = Complex::new(0_f64, 0.);
 
         for l in 1..P{
-            wprime += l as f32 *self.local[l]*(z-z0).powf(l as f32 - 1.)
+            wprime += l as f64 *self.local[l]*(z-z0).powi(l as i32 - 1)
         }
-        star.add_force(&Vector::new(wprime.re, -wprime.im, 0.));
+        star.add_force(&Vector::new(-wprime.re as f32, wprime.im as f32, 0.));
     }
 }
 #[derive(Debug,Clone)]
@@ -281,24 +293,29 @@ impl Node{
                     node.p2m();
                 }
                 // calculate m2m for this instance
+                let mut new_multi: Multipole  = Multipole::empty();
+
                 for node in nodes.iter(){
                     match node {
                         Self::Internal { nodes:_, bounds: source_bound, multi:mb }=>{
-                            let mut new_multi = Multipole::empty();
-                            let source = mb.as_ref().unwrap();
+                            
+                                let source = mb.as_ref().unwrap();
 
-                            new_multi.m2m(&source, source_bound, bounds);
-                            *multi = Some(new_multi)
+                                new_multi.m2m(&source, source_bound, bounds);
+                                
+
+                            
+                            
                         }
                         Self::Leaf { star:_, bounds: source_bound, multi:mb }=>{
-                            let mut new_multi = Multipole::empty();
                             let source = mb.as_ref().unwrap();
 
                             new_multi.m2m(&source, source_bound, bounds);
-                            *multi = Some(new_multi)
                         }
                     }
                 }
+                *multi = Some(new_multi)
+
 
                 
 
@@ -341,7 +358,7 @@ impl Node{
                             return
                         }
                         let mutli = multi.as_mut().unwrap();
-                        mutli.calc_local(mb.unwrap(), &bb, bounds);
+                        mutli.calc_local(&mb.unwrap(), &bb, bounds);
                         
                     }
                     _=>{unreachable!()}
@@ -355,7 +372,7 @@ impl Node{
                             return
                         }
                         let mutli = multi.as_mut().unwrap();
-                        mutli.calc_local(mb.unwrap(), &bb, bounds);
+                        mutli.calc_local(&mb.unwrap(), &bb, bounds);
 
                     }
                     _=>{unreachable!()}
@@ -428,7 +445,8 @@ impl Node{
 
                             a.l2l(source, source_bound, bounds);
                         }
-                    }
+                    }   
+                    node.l2l();
                 }
             }
             Self::Leaf { star:_, bounds:_, multi:_ }=>{
@@ -465,11 +483,11 @@ impl Node{
                 let multi = multi.as_mut().unwrap();
                  match nodeb{
                     Self::Leaf { star: sb, bounds: bb,multi:mb }=>{
-                        let dist = bounds.dist(bb);
-                        if dist >= bounds.thrs{
+                        let dist = bounds.dist(bb)*1.3;
+                        /*if dist >= bounds.thrs{
                             // if they are too far they will have the multipole effect instead
                             return;
-                        }
+                        }*/
                         for x in star{
                             for y in sb{
                                 // the L2P step is implemented in gravity(x,y)
@@ -560,6 +578,78 @@ impl Node{
         return stars
     }
 
+    pub fn bounds(&self) -> &Bounds {
+        match self {
+            Self::Internal { bounds, .. } => bounds,
+            Self::Leaf { bounds, .. } => bounds,
+        }
+    }
+    
+    pub fn multipole(&self) -> &Multipole {
+        match self {
+            Self::Internal { multi, .. } => multi.as_ref().unwrap(),
+            Self::Leaf { multi, .. } => multi.as_ref().unwrap(),
+        }
+    }
+    pub fn multipole_mut(&mut self) -> &mut Multipole {
+        match self {
+            Self::Internal { multi, .. } => multi.as_mut().unwrap(),
+            Self::Leaf { multi, .. } => multi.as_mut().unwrap(),
+        }
+    }
+    // ! rework this function
+    pub fn interact(&mut self, source: &Node, pascal: &[[f64; P + 1]; 2 * P]) {
+        let self_bounds = self.bounds().clone();
+        let src_bounds = source.bounds();
+
+        // 1. Well-Separated Check (M2L)
+        if self_bounds.is_well_separated(src_bounds) {
+             if let src_multi = source.multipole() {
+                let my_multi = self.multipole_mut();
+                    my_multi.calc_local(src_multi, src_bounds, &self_bounds);
+                
+            }
+            return; // Interaction handled at this level!
+        }
+
+        // 2. Not Well-Separated: Match on `self` directly to avoid tuple move conflicts
+        match self {
+            Self::Leaf { .. } => {
+                match source {
+                    // Target is Leaf, Source is Leaf -> Near-field P2P
+                    Self::Leaf { .. } => {
+                        self.leaf_grav(source);
+                    }
+                    // Target is Leaf, Source is Internal -> Recurse down source children
+                    Self::Internal { nodes: src_nodes, .. } => {
+                        for src_child in src_nodes.iter() {
+                            self.interact(src_child, pascal);
+                        }
+                    }
+                }
+            }
+            Self::Internal { nodes: my_nodes, .. } => {
+                match source {
+                    // Target is Internal, Source is Leaf -> Recurse down target children
+                    Self::Leaf { .. } => {
+                        for my_child in my_nodes.iter_mut() {
+                            my_child.interact(source, pascal);
+                        }
+                    }
+                    // Target is Internal, Source is Internal -> Cross-recurse all children
+                    Self::Internal { nodes: src_nodes, .. } => {
+                        for my_child in my_nodes.iter_mut() {
+                            for src_child in src_nodes.iter() {
+                                my_child.interact(src_child, pascal);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
 
     
 }
@@ -569,16 +659,16 @@ fn gravity(star: &mut Star, star2: &Star){
     }
     let dif_vec = &star2.pos-&star.pos;
     
-    let softening_sq = 0.1; 
+    let softening_sq = 0.0001; 
     let rs = &dif_vec*&dif_vec;
 
-    let rs_soft = rs + softening_sq;
+    let rs_soft = rs.sqrt() + softening_sq;
 
 
     let mass = star.mass*star2.mass;
     // ! For now lets ignore the constant
-    let grav_mag = mass/(rs_soft)*10_f32.powf(-1.);
-    let n_vec =&dif_vec*&(1./(rs_soft.sqrt()));
+    let grav_mag = mass/(rs_soft);//*10_f64.powf(-1.);
+    let n_vec =&dif_vec*&(1./(rs_soft));
     let grav_vec = &n_vec*&grav_mag;
     star.add_force(&grav_vec);
 }
@@ -630,10 +720,15 @@ impl Export for Funi {
     fn update(&mut self) {
         
         let mut tree = self.create_tree();
-        tree.m2l();
+        //tree.m2l();
+        let source_tree = tree.clone();
+        let pascal = build_pascal_table();
+
+        // 3. Drive the entire FMM M2L & P2P pass across the quadtree
+        tree.interact(&source_tree, &pascal);
         tree.l2l();
         tree.apply_far_field();
-        tree.gravity();
+        //tree.gravity();
         self.stars = tree.collapse();
         self.new_pos();
 
@@ -643,7 +738,7 @@ impl Export for Funi {
             if time < 1{
                 return
             }
-            let fps = self.itr as f32/time as f32;
+            let fps = self.itr as f64/time as f64;
             println!("It took {} seconds or {} fps", time, fps);
             self.itr = 0;
             self.time = SystemTime::now();
