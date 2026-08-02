@@ -93,12 +93,17 @@ impl Star{
     // ! implement runge-kutta 4 or someshit like that ffs euler my ass 
     pub fn update_pos(&mut self){
         self.speed = &self.speed + &(&self.force*&DELTA_T);
+        /*if self.speed.x > 1. || self.speed.y >= 1.{
+            self.speed.x = 0.;
+            self.speed.y = 0.;
+        }*/
         self.pos = &self.pos + &(&self.speed*&DELTA_T);
         self.force= Vector::zero_vec();
-        /*if self.pos.x > 1000. || self.pos.y > 800.{
+        /*if self.pos.x > 1. || self.pos.x < 0. || self.pos.y > 1. || self.pos.y < 0.{
             self.pos = &self.pos - &(&self.speed*&DELTA_T);
             self.speed = -self.speed;
         }*/
+        
     }
     pub fn samsies(&self, other: &Self)->bool{
         return self.pos.x == other.pos.x && self.pos.y == other.pos.y

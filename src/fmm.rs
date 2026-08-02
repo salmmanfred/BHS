@@ -106,7 +106,7 @@ struct Multipole{
 }
 impl Multipole{
     pub fn new(stars: &Vec<Star>, bounds: &Bounds)->Self{
-        let mut mass = 0_f64;
+        let mass: f64 = stars.iter().map(|s| s.mass as f64).sum();
         let z0 = bounds.z();
 
         let mut aks = [Complex{re: 0_f64, im: 0.};P];
@@ -116,11 +116,11 @@ impl Multipole{
             let mut ak = Complex { re: 0_f64, im: 0. };
             for x in stars{
                 let massi = x.mass as f64;
-                mass += massi as f64;
+                //mass += massi as f64;
                 ak += massi*(x.pos.z()-z0).powi(k as i32);
             }
             ak *= -1./k as f64;
-            mass/=7.;
+            //mass/=7.;
             aks[k] = ak
         }
         Multipole{
@@ -138,7 +138,7 @@ impl Multipole{
     pub fn m2m(&mut self,source: &Multipole, source_bound: &Bounds, bounds: &Bounds){
         let z0 = source_bound.z();
         let x0 = bounds.z();
-        let Z = z0-x0;
+        let Z = z0-x0+Complex::new(1_f64,1.);
         let pascal = build_pascal_table();
 
 
@@ -160,7 +160,7 @@ impl Multipole{
         let pascal = build_pascal_table();
         let z0 = source_bound.z();
         let x0 = bounds.z();
-        let z = x0-z0;
+        let z = x0-z0+Complex::new(1_f64,1.);
 
         for i in 0..P{
             for l in i..P{
@@ -172,7 +172,7 @@ impl Multipole{
     pub fn calc_local(&mut self, source: &Multipole, source_bound: &Bounds, bounds: &Bounds){
         let z0 = source_bound.z();
         let x0 = bounds.z();
-        let Z = z0-x0;
+        let Z = z0-x0+Complex::new(1_f64,1.);
         let pascal = build_pascal_table();
 
         let mut b0 = source.mass*(-Z).ln();
@@ -659,7 +659,7 @@ fn gravity(star: &mut Star, star2: &Star){
     }
     let dif_vec = &star2.pos-&star.pos;
     
-    let softening_sq = 0.0001; 
+    let softening_sq = 1.; 
     let rs = &dif_vec*&dif_vec;
 
     let rs_soft = rs.sqrt() + softening_sq;
@@ -682,7 +682,7 @@ impl Funi{
         let mut rng = rand::rng();
         let time_now = SystemTime::now();
 
-                let stars: Vec<Star> = (0..N).map(|_| Star::new(rng.random_range(0..1000) as f32,rng.random_range(0..800) as f32)).collect();
+                let stars: Vec<Star> = (0..N).map(|_| Star::new(rng.random_range(0.0..1000.) as f32,rng.random_range(0.0..800.) as f32)).collect();
 
 
         Self { stars: stars, itr:0, time: time_now }
@@ -713,6 +713,9 @@ impl Export for Funi {
         
         let mut strs = Vec::new();
         for x in self.stars.clone(){
+            let mut x = x;
+            //x.pos.x *= 1000.;
+            //x.pos.y *= 800.;
             strs.extend(x.flat())
         }
         strs
@@ -734,6 +737,7 @@ impl Export for Funi {
 
         self.itr += 1;
         if self.itr % 10 == 1{
+            //println!("{:#?}",self.stars[0]);
             let time = self.time.elapsed().unwrap().as_secs();
             if time < 1{
                 return
