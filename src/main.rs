@@ -5,6 +5,8 @@ use std::{ops::{Add, Mul, Neg, Sub}, vec};
 mod naive;
 mod render;
 mod bh;
+mod fmm;
+
 use crate::bh::MASS;
 const DELTA_T:f32 = 0.01;
 const N: usize = 10000;
@@ -112,6 +114,7 @@ pub trait Export{
 
 fn main() {
     //naive::run();
-    bh::run();
+    //bh::run();
+    fmm::run();
 }
 
