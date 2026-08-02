@@ -99,10 +99,10 @@ impl Star{
         }*/
         self.pos = &self.pos + &(&self.speed*&DELTA_T);
         self.force= Vector::zero_vec();
-        /*if self.pos.x > 1. || self.pos.x < 0. || self.pos.y > 1. || self.pos.y < 0.{
+        if self.pos.x > 1000. || self.pos.x < 0. || self.pos.y > 800. || self.pos.y < 0.{
             self.pos = &self.pos - &(&self.speed*&DELTA_T);
             self.speed = -self.speed;
-        }*/
+        }
         
     }
     pub fn samsies(&self, other: &Self)->bool{
