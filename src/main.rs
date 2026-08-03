@@ -7,6 +7,7 @@ mod naive;
 mod render;
 mod bh;
 mod fmm;
+mod fmm_adap;
 
 
 use crate::bh::MASS;
@@ -126,5 +127,6 @@ pub trait Export{
 fn main() {
     //naive::run();
     //bh::run();
-    fmm::run();
+    //fmm::run();
+    fmm_adap::run();
 }
