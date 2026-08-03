@@ -5,8 +5,8 @@ use winit::event_loop::EventLoop;
 use crate::{Export, N, Star, Vector, render::App};
 use rand::RngExt;
 
-const MAX_STAR: usize = 30;
-const MAXLVL: usize = 30;
+const MAX_STAR: usize = 20;
+const MAXLVL: usize = 20;
 pub const P: usize = 8;
 
 #[derive(Debug,Copy,Clone)]
@@ -120,6 +120,7 @@ impl Multipole{
             //mass/=7.;
             aks[k] = ak
         }
+        aks[0] = Complex::new(mass, 0_f64);
         Multipole{
             mass,
             multi: aks,
@@ -185,7 +186,7 @@ impl Multipole{
             for k in 1..P{
                 //let sign = (-1_f64).powf(k as f64);
                 let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
-                let comb = pascal[l + k - 1][l];
+                let comb = pascal[l + k - 1][k];
                 bl1 += sign * source.multi[k]* comb/(Z.powi(k as i32)) 
             }
             self.local[l] += bl0 + bl1*(1./Z_l)
@@ -197,7 +198,7 @@ impl Multipole{
         let z = star.pos.z();
         let mut wprime = Complex::new(0_f64, 0.);
 
-        for l in 1..P{
+        for l in 0..P{
             wprime += l as f64 *self.local[l]*(z-z0).powi(l as i32 - 1)
         }
         star.add_force(&Vector::new(-wprime.re as f32, wprime.im as f32, 0.));
@@ -554,7 +555,7 @@ impl Funi{
         let stars: Vec<Star> = (0..N).map(|_| {
             let y_center = 400.;
             let x_center = 500.;
-            let r_max = 300.;
+            let r_max = 200.;
             let u: f32 = rng.random_range(0.0..1.0);
             let r = ( u * r_max).max(0.5); 
             let angle: f32 = rng.random_range(0.0..std::f32::consts::TAU);
@@ -564,7 +565,7 @@ impl Funi{
             let x = x_center + x_c;
             let y = y_center + y_c;
 
-            let speed_mag = (17000. / r).sqrt();
+            let speed_mag = (1000000. / r).sqrt();
             let vx = (y_c / r) * speed_mag;
             let vy = (-x_c / r) * speed_mag;
 
@@ -631,7 +632,6 @@ impl Export for Funi {
         //tree.gravity();
         self.stars = tree.collapse();
         self.new_pos();
-
         self.itr += 1;
         if self.itr % 10 == 1{
             //println!("{:#?}",self.stars[0]);

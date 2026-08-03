@@ -12,7 +12,7 @@ mod fmm_adap;
 
 use crate::bh::MASS;
 const DELTA_T:f32 = 0.01;
-const N: usize = 100000;
+const N: usize = 10000;
 
 #[derive(Clone,Copy,Debug)]
 struct Vector{
