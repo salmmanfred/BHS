@@ -296,13 +296,9 @@ impl Node{
                     match node {
                         Self::Internal { nodes:_, bounds: source_bound, multi:mb }=>{
                             
-                                let source = mb.as_ref().unwrap();
+                            let source = mb.as_ref().unwrap();
 
-                                new_multi.m2m(&source, source_bound, bounds, pascal);
-                                
-
-                            
-                            
+                            new_multi.m2m(&source, source_bound, bounds, pascal);
                         }
                         Self::Leaf { star:_, bounds: source_bound, multi:mb }=>{
                             let source = mb.as_ref().unwrap();
