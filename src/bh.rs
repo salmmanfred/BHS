@@ -112,7 +112,7 @@ impl Node{
             }
             Self::Leaf { star: old_star, bounds , idx: old_idx,com,mass}=>{
 
-                if depth >= 20 || old_star.len() >= 2 || (old_star[0].pos.x - star.pos.x).abs() < 1e-4 && (old_star[0].pos.y - star.pos.y).abs() < 1e-4{
+                if depth >= 20 || old_star.len() <= 10 || (old_star[0].pos.x - star.pos.x).abs() < 1e-4 && (old_star[0].pos.y - star.pos.y).abs() < 1e-4{
                     // Lets stop the madness
                     
                     old_star.push(star);
