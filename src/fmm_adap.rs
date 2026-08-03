@@ -7,6 +7,8 @@ use rand::RngExt;
 
 const MAX_STAR: usize = 30;
 const MAXLVL: usize = 30;
+pub const P: usize = 8;
+
 #[derive(Debug,Copy,Clone)]
 struct Bounds{
     x: f32,
@@ -76,11 +78,10 @@ impl Bounds{
 
         // Standard FMM condition: centers are farther apart than 1.5 - 2.0x box width
         // Adjust `1.5` if you want higher accuracy (2.0) or faster speed (1.2)
-        dist > (self.w + other.w) * 1.2
+        dist > (self.w + other.w) * 0.6
     }
 }
 
-pub const P: usize = 8;
 
 pub fn build_pascal_table() -> [[f64; P + 1]; 2 * P] {
     let mut table = [[0.0; P + 1]; 2 * P];
@@ -131,7 +132,7 @@ impl Multipole{
         Multipole { mass: 0., multi: local, local }
     }
 
-    pub fn m2m(&mut self,source: &Multipole, source_bound: &Bounds, bounds: &Bounds,pascal: &[[f64; 9]; 16]){
+    pub fn m2m(&mut self,source: &Multipole, source_bound: &Bounds, bounds: &Bounds,pascal: &[[f64; P + 1]; 2 * P]){
         let z0 = source_bound.z();
         let x0 = bounds.z();
         let Z = z0-x0+Complex::new(0.1_f64,0.1);
@@ -151,7 +152,7 @@ impl Multipole{
 
 
     }
-    pub fn l2l(&mut self,source: &Multipole, source_bound: &Bounds, bounds: &Bounds,pascal: &[[f64; 9]; 16]){
+    pub fn l2l(&mut self,source: &Multipole, source_bound: &Bounds, bounds: &Bounds,pascal: &[[f64; P + 1]; 2 * P]){
         let z0 = source_bound.z();
         let x0 = bounds.z();
         let z = x0-z0+Complex::new(0.1_f64,0.1);
@@ -163,7 +164,7 @@ impl Multipole{
         }
     }
 
-    pub fn calc_local(&mut self, source: &Multipole, source_bound: &Bounds, bounds: &Bounds,pascal: &[[f64; 9]; 16]){
+    pub fn calc_local(&mut self, source: &Multipole, source_bound: &Bounds, bounds: &Bounds,pascal: &[[f64; P + 1]; 2 * P]){
         let z0 = source_bound.z();
         let x0 = bounds.z();
         let Z = z0-x0+Complex::new(0.1_f64,0.1);
