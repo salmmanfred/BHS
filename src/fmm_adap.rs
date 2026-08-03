@@ -208,7 +208,7 @@ impl Multipole{
 }
 #[derive(Debug,Clone)]
 enum Node{
-    
+    Empty,
     Internal{
         nodes: Box<[Node;4]>,
         bounds: Bounds,
@@ -225,22 +225,22 @@ enum Node{
 impl Node{
     pub fn new(stars: Vec<Star>,lvl: usize, bounds: Bounds)->Self{
         let mut tree = Self::Internal { nodes: Box::new([
-            Self::create_internal(bounds.subdivide(0), lvl),
-            Self::create_internal(bounds.subdivide(1), lvl),
-            Self::create_internal(bounds.subdivide(2), lvl),
-            Self::create_internal(bounds.subdivide(3), lvl),
+            Self::Empty,
+            Self::Empty,
+            Self::Empty,
+            Self::Empty,
+
+
             ]), bounds, multi: Option::None };
 
         for star in stars{
-            tree.push_down( star);
+            tree.push_down( star, bounds, 0);
         }
 
         return tree
 
     }
-    fn get_leaf_center(&self)->Vec<Vector>{
-        unimplemented!()
-    }
+    
     fn create_internal(bounds: Bounds, lvl: usize)->Self{
         if lvl == MAXLVL{
             return Self::Leaf { star: Vec::new(), bounds, multi: Option::None };
@@ -255,27 +255,42 @@ impl Node{
             ]), bounds, multi: Option::None }
 
     }
-    pub fn push_down(&mut self, star: Star){
+    pub fn push_down(&mut self, star: Star,bounds: Bounds, lvl: usize){
 
         match self{
+            Self::Empty =>{
+                *self = Self::Leaf { star: vec![star], bounds: bounds, multi: None }
+            }
+
             Self::Internal { nodes, bounds, multi:_ }=>{
                 if star.pos.x <= bounds.x{
                     if star.pos.y <= bounds.y{
-                        nodes[0].push_down(star,);
+                        nodes[0].push_down(star,bounds.subdivide(0),lvl+1);
                     }else{
-                        nodes[2].push_down(star,);
+                        nodes[2].push_down(star,bounds.subdivide(2),lvl+1);
                     }
                 }
                 else{
                     if star.pos.y <= bounds.y{
-                        nodes[1].push_down(star,);
+                        nodes[1].push_down(star,bounds.subdivide(1),lvl+1);
                     }else{
-                        nodes[3].push_down(star,);
+                        nodes[3].push_down(star,bounds.subdivide(3),lvl+1);
                     }
                 }
             }
-            Self::Leaf { star: starvec, bounds:_ , multi:_} =>{
-                starvec.push(star);
+            Self::Leaf { star: starvec, bounds  , multi:_} =>{
+                if lvl >= MAXLVL{
+                    starvec.push(star);
+                    return;
+                }
+                let mut nn = Self::Internal { nodes:  Box::new([Self::Empty,Self::Empty,Self::Empty,Self::Empty,]),
+                    bounds: *bounds, multi: None };
+                nn.push_down(star, *bounds, lvl+1);
+                
+                nn.push_down(starvec[0], *bounds, lvl+1);
+
+                *self = nn;
+
             }
         }
         
@@ -285,6 +300,8 @@ impl Node{
 
     pub fn p2m(&mut self, pascal: &[[f64; P + 1]; 2 * P]){
         match self {
+            Self::Empty =>{unreachable!()}
+
             Self::Internal { nodes, bounds, multi} =>{
                 for node in nodes.iter_mut(){
                     node.p2m(pascal);
@@ -305,6 +322,7 @@ impl Node{
 
                             new_multi.m2m(&source, source_bound, bounds, pascal);
                         }
+                        Self::Empty =>{unreachable!()}
                     }
                 }
                 *multi = Some(new_multi)
@@ -330,12 +348,16 @@ impl Node{
             Self::Leaf { star:_, bounds:_ , multi:_}=>{
                 unreachable!()
             }
+            Self::Empty =>{unreachable!()}
+
         }
     }
     fn is_leaf(&self)->bool{
         match self{
-            Self::Internal { nodes:_, bounds:_ , multi:_}=> return false,
-            Self::Leaf { star:_, bounds:_ , multi:_} => return true,
+            Self::Internal { ..}=> return false,
+            Self::Leaf { ..} => return true,
+            Self::Empty =>{return false}
+
         }
     }
 
@@ -372,6 +394,8 @@ impl Node{
                 }
 
             }
+            Self::Empty =>{unreachable!()}
+
         }
 
 
@@ -416,6 +440,8 @@ impl Node{
         Self::Leaf { star:_, bounds:_ ,multi:_}=>{
            return // no m2l on this layer since it has no children and the leaf m2l is done at higher levels ^
         }
+        Self::Empty =>{unreachable!()}
+
     }
 
     }
@@ -438,6 +464,7 @@ impl Node{
 
                             a.l2l(source, source_bound, bounds,pascal);
                         }
+                        Self::Empty=>{}
                     }   
                     node.l2l(pascal);
                 }
@@ -445,6 +472,8 @@ impl Node{
             Self::Leaf { star:_, bounds:_, multi:_ }=>{
                 return // the leaf cant distribute down
             }
+            Self::Empty =>{unreachable!()}
+
         }
     }
     fn is_grandfather(&self)->bool{
@@ -496,6 +525,8 @@ impl Node{
                 }
 
             }
+            Self::Empty =>{unreachable!()}
+
         }
     }
     pub fn apply_far_field(&mut self) {
@@ -511,6 +542,7 @@ impl Node{
                     m.local_to_force(s, bounds);
                 }
             }
+            Self::Empty=>{}
         }
     }
     pub fn gravity(&mut self){
@@ -551,6 +583,8 @@ impl Node{
             Self::Leaf { star:_, bounds:_ ,multi:_}=>{
                 unreachable!()
             }
+            Self::Empty =>{unreachable!()}
+
         }
 
     }
@@ -567,6 +601,8 @@ impl Node{
             Self::Leaf { star, bounds:_, multi:_ }=>{
                 stars.extend(star);
             }
+            Self::Empty =>{}
+
         }
         return stars
     }
@@ -575,6 +611,8 @@ impl Node{
         match self {
             Self::Internal { bounds, .. } => bounds,
             Self::Leaf { bounds, .. } => bounds,
+            Self::Empty =>{unreachable!()}
+
         }
     }
     
@@ -582,12 +620,16 @@ impl Node{
         match self {
             Self::Internal { multi, .. } => multi.as_ref().unwrap(),
             Self::Leaf { multi, .. } => multi.as_ref().unwrap(),
+            Self::Empty =>{unreachable!()}
+
         }
     }
     pub fn multipole_mut(&mut self) -> &mut Multipole {
         match self {
             Self::Internal { multi, .. } => multi.as_mut().unwrap(),
             Self::Leaf { multi, .. } => multi.as_mut().unwrap(),
+            Self::Empty =>{unreachable!()}
+
         }
     }
     // ! rework this function
@@ -619,6 +661,8 @@ impl Node{
                             self.interact(src_child, pascal);
                         }
                     }
+                        Self::Empty =>{unreachable!()}
+
                 }
             }
             Self::Internal { nodes: my_nodes, .. } => {
@@ -637,8 +681,12 @@ impl Node{
                             }
                         }
                     }
+                        Self::Empty =>{unreachable!()}
+
                 }
             }
+                        Self::Empty =>{unreachable!()}
+
         }
     }
 
