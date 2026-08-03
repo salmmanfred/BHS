@@ -5,8 +5,8 @@ use winit::event_loop::EventLoop;
 use crate::{Export, N, Star, Vector, render::App};
 use rand::RngExt;
 
-
-const MAXLVL: usize = 4;
+const MAX_STAR: usize = 10;
+const MAXLVL: usize = 20;
 #[derive(Debug,Copy,Clone)]
 struct Bounds{
     x: f32,
@@ -138,7 +138,7 @@ impl Multipole{
     pub fn m2m(&mut self,source: &Multipole, source_bound: &Bounds, bounds: &Bounds,pascal: &[[f64; 9]; 16]){
         let z0 = source_bound.z();
         let x0 = bounds.z();
-        let Z = z0-x0+Complex::new(1_f64,1.);
+        let Z = z0-x0+Complex::new(0.1_f64,0.1);
 
 
         self.mass += source.mass;
@@ -158,7 +158,7 @@ impl Multipole{
     pub fn l2l(&mut self,source: &Multipole, source_bound: &Bounds, bounds: &Bounds,pascal: &[[f64; 9]; 16]){
         let z0 = source_bound.z();
         let x0 = bounds.z();
-        let z = x0-z0+Complex::new(1_f64,1.);
+        let z = x0-z0+Complex::new(0.1_f64,0.1);
 
         for i in 0..P{
             for l in i..P{
@@ -170,7 +170,7 @@ impl Multipole{
     pub fn calc_local(&mut self, source: &Multipole, source_bound: &Bounds, bounds: &Bounds,pascal: &[[f64; 9]; 16]){
         let z0 = source_bound.z();
         let x0 = bounds.z();
-        let Z = z0-x0+Complex::new(1_f64,1.);
+        let Z = z0-x0+Complex::new(0.1_f64,0.1);
 
         let mut b0 = source.mass*(-Z).ln();
         for k in 1..P{
@@ -208,7 +208,10 @@ impl Multipole{
 }
 #[derive(Debug,Clone)]
 enum Node{
-    Empty,
+    Empty{
+        bounds: Bounds,
+        multi: Option<Multipole>,
+    },
     Internal{
         nodes: Box<[Node;4]>,
         bounds: Bounds,
@@ -225,10 +228,10 @@ enum Node{
 impl Node{
     pub fn new(stars: Vec<Star>,lvl: usize, bounds: Bounds)->Self{
         let mut tree = Self::Internal { nodes: Box::new([
-            Self::Empty,
-            Self::Empty,
-            Self::Empty,
-            Self::Empty,
+            Self::Empty{ bounds: bounds.subdivide(0), multi: Some(Multipole::empty()) },
+            Self::Empty{ bounds: bounds.subdivide(1), multi: Some(Multipole::empty()) },
+            Self::Empty{ bounds: bounds.subdivide(2), multi: Some(Multipole::empty()) },
+            Self::Empty{ bounds: bounds.subdivide(3), multi: Some(Multipole::empty()) },
 
 
             ]), bounds, multi: Option::None };
@@ -258,8 +261,8 @@ impl Node{
     pub fn push_down(&mut self, star: Star,bounds: Bounds, lvl: usize){
 
         match self{
-            Self::Empty =>{
-                *self = Self::Leaf { star: vec![star], bounds: bounds, multi: None }
+            Self::Empty{bounds,..} =>{
+                *self = Self::Leaf { star: vec![star], bounds: *bounds, multi: None }
             }
 
             Self::Internal { nodes, bounds, multi:_ }=>{
@@ -279,15 +282,23 @@ impl Node{
                 }
             }
             Self::Leaf { star: starvec, bounds  , multi:_} =>{
-                if lvl >= MAXLVL || (starvec[0].pos.x - star.pos.x).abs() < 1e-4 && (starvec[0].pos.y - star.pos.y).abs() < 1e-4{
+                // || (starvec[0].pos.x - star.pos.x).abs() < 1e-4 && (starvec[0].pos.y - star.pos.y).abs() < 1e-4
+                if lvl >= MAXLVL || starvec.len() < MAX_STAR {
                     starvec.push(star);
                     return;
                 }
-                let mut nn = Self::Internal { nodes:  Box::new([Self::Empty,Self::Empty,Self::Empty,Self::Empty,]),
+                let mut nn = Self::Internal { nodes:  Box::new(
+                    [Self::Empty{ bounds: bounds.subdivide(0), multi: Some(Multipole::empty()) }
+                    ,Self::Empty{ bounds: bounds.subdivide(1), multi: Some(Multipole::empty()) },
+                    Self::Empty{ bounds: bounds.subdivide(2), multi: Some(Multipole::empty()) },
+                    Self::Empty{ bounds: bounds.subdivide(3), multi: Some(Multipole::empty()) },
+                    ]),
                     bounds: *bounds, multi: None };
-                nn.push_down(star, *bounds, lvl+1);
                 
-                nn.push_down(starvec[0], *bounds, lvl+1);
+                nn.push_down(star, *bounds, lvl+1);
+                for n in starvec{
+                    nn.push_down(*n, *bounds, lvl+1);
+                }
 
                 *self = nn;
 
@@ -300,7 +311,7 @@ impl Node{
 
     pub fn p2m(&mut self, pascal: &[[f64; P + 1]; 2 * P]){
         match self {
-            Self::Empty =>{unreachable!()}
+            Self::Empty{..} =>{return;}
 
             Self::Internal { nodes, bounds, multi} =>{
                 for node in nodes.iter_mut(){
@@ -322,7 +333,7 @@ impl Node{
 
                             new_multi.m2m(&source, source_bound, bounds, pascal);
                         }
-                        Self::Empty =>{unreachable!()}
+                        Self::Empty{..} =>{continue;}
                     }
                 }
                 *multi = Some(new_multi)
@@ -348,7 +359,7 @@ impl Node{
             Self::Leaf { star:_, bounds:_ , multi:_}=>{
                 unreachable!()
             }
-            Self::Empty =>{unreachable!()}
+            Self::Empty{..} =>{unreachable!()}
 
         }
     }
@@ -356,7 +367,7 @@ impl Node{
         match self{
             Self::Internal { ..}=> return false,
             Self::Leaf { ..} => return true,
-            Self::Empty =>{return false}
+            Self::Empty{..} =>{return false}
 
         }
     }
@@ -394,7 +405,7 @@ impl Node{
                 }
 
             }
-            Self::Empty =>{unreachable!()}
+            Self::Empty{..} =>{unreachable!()}
 
         }
 
@@ -440,7 +451,7 @@ impl Node{
         Self::Leaf { star:_, bounds:_ ,multi:_}=>{
            return // no m2l on this layer since it has no children and the leaf m2l is done at higher levels ^
         }
-        Self::Empty =>{unreachable!()}
+        Self::Empty{..} =>{return}
 
     }
 
@@ -464,7 +475,7 @@ impl Node{
 
                             a.l2l(source, source_bound, bounds,pascal);
                         }
-                        Self::Empty=>{}
+                        Self::Empty{..}=>{}
                     }   
                     node.l2l(pascal);
                 }
@@ -472,7 +483,7 @@ impl Node{
             Self::Leaf { star:_, bounds:_, multi:_ }=>{
                 return // the leaf cant distribute down
             }
-            Self::Empty =>{unreachable!()}
+            Self::Empty{..} =>{return;}
 
         }
     }
@@ -525,7 +536,7 @@ impl Node{
                 }
 
             }
-            Self::Empty =>{unreachable!()}
+            Self::Empty{..} =>{unreachable!()}
 
         }
     }
@@ -542,7 +553,7 @@ impl Node{
                     m.local_to_force(s, bounds);
                 }
             }
-            Self::Empty=>{}
+            Self::Empty{..}=>{}
         }
     }
     pub fn gravity(&mut self){
@@ -583,7 +594,7 @@ impl Node{
             Self::Leaf { star:_, bounds:_ ,multi:_}=>{
                 unreachable!()
             }
-            Self::Empty =>{unreachable!()}
+            Self::Empty{..} =>{unreachable!()}
 
         }
 
@@ -601,7 +612,7 @@ impl Node{
             Self::Leaf { star, bounds:_, multi:_ }=>{
                 stars.extend(star);
             }
-            Self::Empty =>{}
+            Self::Empty{..} =>{}
 
         }
         return stars
@@ -611,7 +622,7 @@ impl Node{
         match self {
             Self::Internal { bounds, .. } => bounds,
             Self::Leaf { bounds, .. } => bounds,
-            Self::Empty =>{unreachable!()}
+            Self::Empty{bounds,..} =>{bounds}
 
         }
     }
@@ -620,7 +631,7 @@ impl Node{
         match self {
             Self::Internal { multi, .. } => multi.as_ref().unwrap(),
             Self::Leaf { multi, .. } => multi.as_ref().unwrap(),
-            Self::Empty =>{unreachable!()}
+            Self::Empty{multi,..} =>{multi.as_ref().unwrap()}
 
         }
     }
@@ -628,7 +639,7 @@ impl Node{
         match self {
             Self::Internal { multi, .. } => multi.as_mut().unwrap(),
             Self::Leaf { multi, .. } => multi.as_mut().unwrap(),
-            Self::Empty =>{unreachable!()}
+            Self::Empty{multi,..} =>{multi.as_mut().unwrap()}
 
         }
     }
@@ -661,7 +672,7 @@ impl Node{
                             self.interact(src_child, pascal);
                         }
                     }
-                        Self::Empty =>{unreachable!()}
+                        Self::Empty{..} =>{}
 
                 }
             }
@@ -681,11 +692,11 @@ impl Node{
                             }
                         }
                     }
-                        Self::Empty =>{unreachable!()}
+                        Self::Empty{..} =>{}
 
                 }
             }
-                        Self::Empty =>{unreachable!()}
+                        Self::Empty{..} =>{}
 
         }
     }
@@ -723,8 +734,8 @@ impl Funi{
         let mut rng = rand::rng();
         let time_now = SystemTime::now();
 
-        let stars: Vec<Star> = (0..N).map(|_| Star::new(rng.random_range(0.0..1000.) as f32,rng.random_range(0.0..800.) as f32)).collect();
-        /*let stars: Vec<Star> = (0..N).map(|_| {
+        //let stars: Vec<Star> = (0..N).map(|_| Star::new(rng.random_range(0.0..1000.) as f32,rng.random_range(0.0..800.) as f32)).collect();
+        let stars: Vec<Star> = (0..N).map(|_| {
             let y_center = 400.;
             let x_center = 500.;
             let r_max = 300.;
@@ -754,7 +765,7 @@ impl Funi{
             str
 
         }
-            ).collect();*/
+            ).collect();
 
         Self { stars: stars, itr:0, time: time_now }
     }
@@ -817,6 +828,9 @@ impl Export for Funi {
             println!("It took {} seconds or {} fps", time, fps);
             self.itr = 0;
             self.time = SystemTime::now();
+            if self.stars.len()< N{
+                panic!("Star loss, Stars: {}",self.stars.len())
+            }
         }
 
     }
