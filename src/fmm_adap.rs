@@ -279,7 +279,7 @@ impl Node{
                 }
             }
             Self::Leaf { star: starvec, bounds  , multi:_} =>{
-                if lvl >= MAXLVL{
+                if lvl >= MAXLVL || (starvec[0].pos.x - star.pos.x).abs() < 1e-4 && (starvec[0].pos.y - star.pos.y).abs() < 1e-4{
                     starvec.push(star);
                     return;
                 }
