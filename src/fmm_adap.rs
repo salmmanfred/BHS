@@ -150,7 +150,7 @@ impl Multipole{
             }
             self.multi[j] += aj0+ajk;
         }
-
+        self.multi[0] = Complex::new(self.mass, 0_f64);
 
     }
     pub fn l2l(&mut self,source: &Multipole, source_bound: &Bounds, bounds: &Bounds,pascal: &[[f64; P + 1]; 2 * P]){
@@ -186,7 +186,7 @@ impl Multipole{
             for k in 1..P{
                 //let sign = (-1_f64).powf(k as f64);
                 let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
-                let comb = pascal[l + k - 1][k];
+                let comb = pascal[l + k - 1][l];
                 bl1 += sign * source.multi[k]* comb/(Z.powi(k as i32)) 
             }
             self.local[l] += bl0 + bl1*(1./Z_l)
@@ -198,7 +198,8 @@ impl Multipole{
         let z = star.pos.z();
         let mut wprime = Complex::new(0_f64, 0.);
 
-        for l in 0..P{
+        
+        for l in 1..P{
             wprime += l as f64 *self.local[l]*(z-z0).powi(l as i32 - 1)
         }
         star.add_force(&Vector::new(-wprime.re as f32, wprime.im as f32, 0.));
