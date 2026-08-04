@@ -160,7 +160,7 @@ impl<T:Export> ApplicationHandler<TriangleAction> for App<T> {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true }, 
                             has_dynamic_offset: false, 
-                            min_binding_size: NonZero::new(16)
+                            min_binding_size: NonZero::new(20)
                         },
                             
                         

@@ -280,7 +280,7 @@ impl Export for Buni {
         let mut strs = Vec::new();
         for x in self.stars.clone(){
             strs.extend(x.flat());
-            strs.push(0_f32);
+            //strs.push(0_f32);
         }
         strs
     }
