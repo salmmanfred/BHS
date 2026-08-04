@@ -7,7 +7,7 @@ use rand::RngExt;
 
 const MAX_STAR: usize = 20;
 const MAXLVL: usize = 20;
-pub const P: usize = 8;
+pub const P: usize = 5;
 
 #[derive(Debug,Copy,Clone)]
 struct Bounds{
@@ -78,7 +78,7 @@ impl Bounds{
 
         // Standard FMM condition: centers are farther apart than 1.5 - 2.0x box width
         // Adjust `1.5` if you want higher accuracy (2.0) or faster speed (1.2)
-        dist > (self.w + other.w) * 0.6
+        dist > (self.w + other.w) * 0.7
     }
 }
 
@@ -577,9 +577,9 @@ impl Funi{
             
             let mut str = Star::new(x,y);
             if r_max <= 1.0{
-                str.mass = 1000.;
+                //str.mass = 1000.;
             }
-            str.speed = speed;
+            //str.speed = speed;
             str
 
         }
