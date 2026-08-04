@@ -1,5 +1,6 @@
 use std::{alloc::System, println, time::SystemTime, unreachable} ;
 
+use num::Float;
 use winit::event_loop::EventLoop;
 
 use crate::{Export, N, Star, Vector, render::App};
@@ -193,7 +194,7 @@ fn gravity(star: &mut Star, star2: &Star){
     let softening_sq = 0.1; 
     let rs = &dif_vec*&dif_vec;
 
-    let rs_soft = rs + softening_sq;
+    let rs_soft = rs.sqrt() + softening_sq;
 
 
     let mass = star.mass*star2.mass;
@@ -218,7 +219,7 @@ impl Buni{
         let stars: Vec<Star> = (0..N).map(|_| {
             let y_center = 400.;
             let x_center = 500.;
-            let r_max = 100.;
+            let r_max = 200.;
             let u: f32 = rng.random_range(0.0..1.0);
             let r = ( u * r_max).max(0.5); 
             let angle: f32 = rng.random_range(0.0..std::f32::consts::TAU);
@@ -241,7 +242,7 @@ impl Buni{
             if r_max <= 1.0{
                 str.mass = 1000.;
             }
-            str.speed = speed;
+           // str.speed = speed;
             str
 
         }
@@ -278,7 +279,8 @@ impl Export for Buni {
     fn export_stars(&self)->Vec<f32>{
         let mut strs = Vec::new();
         for x in self.stars.clone(){
-            strs.extend(x.flat())
+            strs.extend(x.flat());
+            strs.push(0_f32);
         }
         strs
     }
